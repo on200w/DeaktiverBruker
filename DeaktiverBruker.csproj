@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net7.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
+    <ApplicationIcon>icon\icon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- Embed the settings icon so the app does not depend on an external file -->
+  <ItemGroup>
+    <EmbeddedResource Include="icon\\instilling_icon.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Management" Version="7.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.DirectoryServices.AccountManagement" Version="7.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Win32.TaskScheduler" Version="2.2.0.3" />
+  </ItemGroup>
+  
+  <!-- Ensure any accidental src/ copies are not compiled; prefer root sources -->
+  <ItemGroup>
+    <Compile Remove="src\**\*.cs" />
+  </ItemGroup>
+
+  
+
+</Project>
