@@ -108,14 +108,70 @@ static class DeactivateService
         // 2) Remove Windows legal notice (caption/text) — use registry API where possible
         try
         {
-            Microsoft.Win32.Registry.SetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System", "legalnoticecaption", "", Microsoft.Win32.RegistryValueKind.String);
-            Microsoft.Win32.Registry.SetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System", "legalnoticetext", "", Microsoft.Win32.RegistryValueKind.String);
+            var regPath = @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System";
+            var beforeCaption = (Microsoft.Win32.Registry.GetValue(regPath, "legalnoticecaption", null) as string) ?? string.Empty;
+            var beforeText = (Microsoft.Win32.Registry.GetValue(regPath, "legalnoticetext", null) as string) ?? string.Empty;
+            sb.AppendLine($"LegalNotice - før: caption='{beforeCaption}', text='{(beforeText.Length > 64 ? beforeText.Substring(0, 64) + "..." : beforeText)}'");
+
+            Microsoft.Win32.Registry.SetValue(regPath, "legalnoticecaption", "", Microsoft.Win32.RegistryValueKind.String);
+            Microsoft.Win32.Registry.SetValue(regPath, "legalnoticetext", "", Microsoft.Win32.RegistryValueKind.String);
+
+            var afterCaption = (Microsoft.Win32.Registry.GetValue(regPath, "legalnoticecaption", null) as string) ?? string.Empty;
+            var afterText = (Microsoft.Win32.Registry.GetValue(regPath, "legalnoticetext", null) as string) ?? string.Empty;
+            sb.AppendLine($"LegalNotice - etter: caption='{afterCaption}', text='{(afterText.Length > 64 ? afterText.Substring(0, 64) + "..." : afterText)}'");
+
+            if (string.IsNullOrEmpty(beforeCaption) && string.IsNullOrEmpty(beforeText))
+            {
+                sb.AppendLine("LegalNotice: ingen eksisterende verdi funnet (ingenting å fjerne)");
+            }
+            else if (string.IsNullOrEmpty(afterCaption) && string.IsNullOrEmpty(afterText))
+            {
+                sb.AppendLine("LegalNotice: fjernet");
+            }
+            else
+            {
+                // Something remained
+                var remain = new System.Collections.Generic.List<string>();
+                if (!string.IsNullOrEmpty(afterCaption)) remain.Add("caption");
+                if (!string.IsNullOrEmpty(afterText)) remain.Add("text");
+                sb.AppendLine($"LegalNotice: kunne ikke fjerne: {string.Join(", ", remain)}");
+                hadError = true;
+            }
         }
         catch
         {
+            // fallback to reg.exe calls and then verify
             var reg1 = RunProcessCapture("reg", "add \"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\" /v legalnoticecaption /t REG_SZ /d \"\" /f");
             var reg2 = RunProcessCapture("reg", "add \"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\" /v legalnoticetext /t REG_SZ /d \"\" /f");
-            if ((reg1 ?? "").IndexOf("ERR:", StringComparison.OrdinalIgnoreCase) >= 0 || (reg2 ?? "").IndexOf("ERR:", StringComparison.OrdinalIgnoreCase) >= 0) hadError = true;
+            if ((reg1 ?? "").IndexOf("ERR:", StringComparison.OrdinalIgnoreCase) >= 0 || (reg2 ?? "").IndexOf("ERR:", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                hadError = true;
+                sb.AppendLine("LegalNotice: feilet å fjerne (reg.exe rapporterte feil)");
+            }
+            else
+            {
+                // verify by reading back
+                try
+                {
+                    var regPath = @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System";
+                    var afterCaption = (Microsoft.Win32.Registry.GetValue(regPath, "legalnoticecaption", null) as string) ?? string.Empty;
+                    var afterText = (Microsoft.Win32.Registry.GetValue(regPath, "legalnoticetext", null) as string) ?? string.Empty;
+                    if (string.IsNullOrEmpty(afterCaption) && string.IsNullOrEmpty(afterText))
+                    {
+                        sb.AppendLine("LegalNotice: fjernet (via reg.exe)");
+                    }
+                    else
+                    {
+                        sb.AppendLine("LegalNotice: ikke fjernet fullstendig (etter reg.exe)");
+                        hadError = true;
+                    }
+                }
+                catch
+                {
+                    sb.AppendLine("LegalNotice: usikker status etter reg.exe");
+                    hadError = true;
+                }
+            }
         }
 
         // 3) Delete all scheduled tasks created by this app (folder or prefix)
@@ -189,16 +245,17 @@ static class DeactivateService
             sb.AppendLine($"Oppgaver slettet: {deleted}");
         }
 
-        if (hadError)
+        // Build a tidy, human-friendly summary
+        var status = hadError ? "Aktivert (med feil)" : "Aktivert";
+        var final = new StringBuilder();
+        final.AppendLine(status + ":");
+        final.AppendLine(new string('─', 44));
+        var summaryLines = sb.ToString().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var line in summaryLines)
         {
-            sb.Insert(0, "Aktivert med feil:\n");
+            final.AppendLine(" - " + line.Trim());
         }
-        else
-        {
-            sb.Insert(0, "Aktivert: " );
-        }
-
-        return sb.ToString().Trim();
+        return final.ToString().Trim();
     }
 
     private static string[] ListAppTasks()

@@ -220,7 +220,12 @@ public partial class MainForm : Form
                 string verify = DeactivateService.VerifyScheduledTask(full);
                 if (!string.IsNullOrWhiteSpace(verify) && !verify.StartsWith("ERR:"))
                 {
-                    AppendStatus($"Bekreftet: {full}\n{verify}", StatusType.Success);
+                    // Build a tidy confirmation: header, divider, then the table returned from PowerShell
+                    var sb = new System.Text.StringBuilder();
+                    sb.AppendLine($"Bekreftet: {full}");
+                    sb.AppendLine(new string('─', 44));
+                    sb.AppendLine(verify.Trim());
+                    AppendStatus(sb.ToString(), StatusType.Success);
                 }
                 else
                 {
